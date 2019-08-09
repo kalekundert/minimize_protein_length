@@ -1,5 +1,5 @@
-Shortest functional protein
-===========================
+Minimize protein length
+=======================
 
 .. toctree::
    :maxdepth: 1

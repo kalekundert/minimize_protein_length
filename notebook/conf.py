@@ -38,7 +38,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'Shortest functional protein'
+project = 'Minimize protein length'
 copyright = '2019, Kale Kundert'
 author = 'Kale Kundert'
 
@@ -100,7 +100,7 @@ html_static_path = ['.static']
 ## Options for HTMLHelp output
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'shortest_functional_protein'
+htmlhelp_basename = 'minimize_protein_length'
 
 ## Options for LaTeX output
 
@@ -126,7 +126,7 @@ latex_elements = { #
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [ #
-    (master_doc, 'shortest_functional_protein.tex', 'Shortest functional protein',
+    (master_doc, 'minimize_protein_length.tex', 'Minimize protein length',
      'Kale Kundert', 'manual'),
 ]
 
@@ -135,7 +135,7 @@ latex_documents = [ #
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [ #
-    (master_doc, 'shortest_functional_protein', 'Shortest functional protein',
+    (master_doc, 'minimize_protein_length', 'Minimize protein length',
      [author], 1)
 ]
 
@@ -145,8 +145,8 @@ man_pages = [ #
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [ #
-    (master_doc, 'shortest_functional_protein', 'Shortest functional protein',
-     author, 'shortest_functional_protein', 'One line description of project.',
+    (master_doc, 'minimize_protein_length', 'Minimize protein length',
+     author, 'minimize_protein_length', 'One line description of project.',
      'Miscellaneous'),
 ]
 
