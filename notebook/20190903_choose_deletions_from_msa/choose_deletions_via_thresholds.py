@@ -195,7 +195,8 @@ def map_msa_indices_to_ref(ref, msa):
 
 
 if __name__ == '__main__':
-    ref, msa = load_msa('blast_refseq_100.aln', 'clustal', 'WP_032461047.1')
+    msa_path = Path('blast_refseq_100.aln')
+    ref, msa = load_msa(msa_path, 'clustal', 'WP_032461047.1')
     weight_alignments(ref, msa)
 
     # Calculate and record the deletion scores.
@@ -205,18 +206,20 @@ if __name__ == '__main__':
     deletion_scores.tofile('deletion_scores.dat')
     conservation_scores.tofile('conservation_scores.dat')
 
-    #i = np.arange(len(deletion_scores))
-
+    i = np.arange(len(deletion_scores))
+    plt.figure(figsize=(6, 2))
     #conservation_scores = pd.Series(conservation_scores)
     #plt.plot(i, conservation_scores.rolling(10).mean())
-
     #plt.plot(i, conservation_scores)
-    #plt.plot(i, deletion_scores)
-    #plt.show()
+    plt.plot(i, deletion_scores)
+    plt.tight_layout()
+    plt.ylabel('Score')
+    plt.xlabel('Residue index')
+    plt.savefig(f'{msa_path.stem}_deletion_scores.svg')
 
     # Output a list of candidate deletions.
     dels = choose_deletions(ref, msa)
-    output_deletions(ref, dels, 'blast_refseq_100_threshold_dels.fasta')
+    output_deletions(ref, dels, f'{msa_path.stem}_threshold_dels.fasta')
 
 
 def test_find_runs():
