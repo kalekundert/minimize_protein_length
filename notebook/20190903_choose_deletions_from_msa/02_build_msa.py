@@ -27,11 +27,10 @@ Options:
         Clear existing results (if any) and recalculate the MSA.
 """
 
-import docopt
 from Bio import AlignIO, SeqIO
 from Bio.Seq import Seq
 from Bio.Align import Applications, MultipleSeqAlignment
-from workspace import BlastWorkspace, MsaWorkspace, report_elapsed_time
+from utils import BlastWorkspace, MsaWorkspace, report_elapsed_time
 from inform import display
 
 def mafft_wrapper(work_msa):
@@ -147,6 +146,7 @@ if __name__ == '__main__':
 
     # Parse the command-line arugments:
 
+    import docopt
     args = docopt.docopt(__doc__)
     params = dict(
         algorithm=args['--algorithm'],

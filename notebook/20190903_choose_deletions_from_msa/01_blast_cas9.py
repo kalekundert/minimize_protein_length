@@ -37,16 +37,16 @@ Options:
         Clear any cached data.
 """
 
-import docopt
 from Bio import SeqIO, Entrez
 from Bio.Blast import NCBIWWW, NCBIXML
-from workspace import BlastWorkspace, report_elapsed_time
+from utils import BlastWorkspace, report_elapsed_time
 from inform import display, plural
 
 if __name__ == '__main__':
 
     # Parse the command-line arguments:
 
+    import docopt
     args = docopt.docopt(__doc__)
     params = dict(
             query='WP_032461047.1',  # S. pyogenes Cas9
