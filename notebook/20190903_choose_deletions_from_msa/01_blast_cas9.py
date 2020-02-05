@@ -13,8 +13,14 @@ Arguments:
         files:
 
         `blast_hits.xml`
-            Results from the 
-            and `blast_hits.fasta`
+            Results from the BLAST query, in a parseable XML format.
+
+        `blast_hits.fasta`
+            Full sequences corresponding to each hit from the BLAST query.
+
+        `metadata.toml`
+            Information about the parameters used for the BLAST query.
+
 Options:
     -d --blast-database=NAME    [default: refseq_protein]
         The NCBI database to query.  The default is `refseq_protein`, which 
@@ -23,100 +29,82 @@ Options:
 
     -n --blast-hits=NUM         [default: 5000]
         The number of BLAST hits to request.  Note that it's better to have too 
-        many than too few, because the deletion-choosing algorithm will 
-        naturally discount poor alignments.  But having more hits will also 
-        make the alignment step more expensive.
+        many than too few, because poor hits can be left out when building the 
+        MSA, and some MSA algorithms may be better or worse than others at 
+        aligning poor matches.
 
     -f --force
         Clear any cached data.
 """
 
-import docopt, toml
-import sys, random, shlex
+import docopt
 from Bio import SeqIO, Entrez
 from Bio.Blast import NCBIWWW, NCBIXML
-from workspace import Workspace
-from datetime import date
-from pathlib import Path
-from inform import display, fatal, plural
+from workspace import BlastWorkspace, report_elapsed_time
+from inform import display, plural
 
-def int_or_none(x):
-    return int(x) if x is not None else x
+if __name__ == '__main__':
 
-def read_meta(work):
-    if work.blast_meta.exists():
-        return toml.load(work.blast_meta)
-    else:
-        return dict(
-                parameters=[],
-                modification_dates={},
-        )
+    # Parse the command-line arguments:
 
-def check_params(prev_params, curr_params):
-    if prev_params and prev_params != curr_params:
-        fatal("BLAST parameters differ from those used previously!")
-        fatal()
-        for key in params:
-            prev = prev_params[key]
-            curr = curr_params[key]
-            if prev != curr:
-                codicil(f"    {key} was {prev!r}, now {curr!r}")
-        fatal()
-        fatal("Use the -f flag to overwrite.  Aborting.")
-        sys.exit(1)
-
-args = docopt.docopt(__doc__)
-work = Workspace(args['<workspace>'])
-params = dict(
-        query='WP_032461047.1',  # S. pyogenes Cas9
-        database=args['--blast-database'],
-        num_hits=int(args['--blast-hits']),
-)
-if args['--force']:
-    work.rmdir()
-    work.mkdir()
-
-# Make sure the specified parameters are consistent with previous runs.
-meta = read_meta(work)
-check_params(meta['parameters'], params)
-meta['parameters'] = params
-
-# Query BLAST for Cas9 homologs.
-if not work.blast_xml.exists():
-    display("Performing BLAST query (30-45 min)...")
-    response = NCBIWWW.qblast(
-            'blastp', 
-            params['database'],
-            params['query'],
-            hitlist_size=params['num_hits'],
-            alignments=params['num_hits'],
+    args = docopt.docopt(__doc__)
+    params = dict(
+            query='WP_032461047.1',  # S. pyogenes Cas9
+            database=args['--blast-database'],
+            num_hits=int(args['--blast-hits']),
     )
 
-    work.blast_xml.write_text(response.read())
-    meta['parameters'] = params
-    meta['modification_dates'][work.blast_xml.name] = date.today()
+    # Setup the workspace (e.g. where input and output files will go):
 
-# Download complete sequences for each BLAST hit.
-if not work.blast_fasta.exists():
-    display("Downloading hits from NCBI...")
-    Entrez.email = 'kale_kundert@hms.harvard.edu'
+    work = BlastWorkspace(args['<workspace>'])
 
-    with work.blast_xml.open() as f:
-        blast = NCBIXML.read(f)
+    if args['--force']:
+        work.rmdir()
+        work.mkdir()
 
-    ids = [params['query']] + [
-            x.hit_id.split('|')[1]
-            for x in blast.alignments
-    ]
-    response = Entrez.efetch(db='protein', rettype='fasta', id=ids)
+    work.update_params(**params)
 
-    work.blast_fasta.write_text(response.read())
-    meta['modification_dates'][work.blast_fasta.name] = date.today()
+    # Query BLAST for Cas9 homologs:
 
-seqs = list(SeqIO.parse(work.blast_fasta, 'fasta'))
-display(f"Found {plural(seqs):# sequence/s}.")
+    if not work.output_xml.exists():
+        display("Performing BLAST query (30-45 min)...")
 
-meta['results'] = dict(num_hits=len(seqs))
-with work.blast_meta.open('w') as f:
-    toml.dump(meta, f)
+        with report_elapsed_time():
+            with work.touch(work.output_xml) as p:
+                response = NCBIWWW.qblast(
+                        'blastp', 
+                        params['database'],
+                        params['query'],
+                        hitlist_size=params['num_hits'],
+                        alignments=params['num_hits'],
+                )
+                p.write_text(response.read())
+
+    # Download complete sequences for each BLAST hit:
+
+    if not work.output_fasta.exists():
+        display("Downloading hits from NCBI...")
+        Entrez.email = 'kale_kundert@hms.harvard.edu'
+
+        with report_elapsed_time():
+            with work.output_xml.open() as f:
+                blast = NCBIXML.read(f)
+
+            ids = [
+                    x.hit_id.split('|')[1]
+                    for x in blast.alignments
+            ]
+            assert params['query'] in ids
+
+            with work.touch(work.output_fasta) as p:
+                response = Entrez.efetch(db='protein', rettype='fasta', id=ids)
+                p.write_text(response.read())
+
+    # Report the results:
+
+    seqs = list(SeqIO.parse(work.output_fasta, 'fasta'))
+    display(f"Found {plural(seqs):# sequence/s}.")
+
+    work.metadata['results'] = dict(num_hits=len(seqs))
+    work.write_metadata()
 
