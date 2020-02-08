@@ -9,10 +9,10 @@ Usage:
 
 import numpy as np
 import pandas as pd
-from utils import *
+from utils import MsaWorkspace, DeletionsWorkspace
+from utils import load_weighted_msa, calc_deletion_scores
 
-def choose_deletions_via_thresholds(ref, msa):
-    scores = calc_deletion_scores(ref, msa)
+def choose_deletions_via_thresholds(scores):
     dfs = []
 
     for threshold in scores:
@@ -25,11 +25,14 @@ def choose_deletions_via_thresholds(ref, msa):
              .reset_index(drop=True)
     
     score_runs(dels, scores)
-    dels.sort_values(by='score', ascending=False, inplace=True)
+    dels.sort_values(by='del_score', ascending=False, inplace=True)
 
     # Require that each deletion score better than the average over the whole 
     # sequence.  This conveniently gets rid of the 0-N deletion.
-    dels = dels[ dels['score'] > np.mean(scores) ]
+    dels = dels [dels['del_score'] > np.mean(scores) ]
+
+    # Require that each deletion comprise less than 10% of the whole sequence.
+    #dels = dels[ dels['del_len'] < 0.1 * len(scores) ]
 
     return dels.reset_index(drop=True)
 
@@ -55,7 +58,7 @@ def find_runs(a):
 
 def score_runs(dels, scores):
     dels['del_len'] = dels['del_end'] - dels['del_start']
-    dels['score'] = dels.apply(
+    dels['del_score'] = dels.apply(
             lambda x: np.mean(scores[ int(x['del_start']) : int(x['del_end']) ]),
             axis=1,
     )
@@ -63,32 +66,32 @@ def score_runs(dels, scores):
 
 if __name__ == '__main__':
 
-    # Parse the command-line arguments.
+    # Setup the workspaces:
 
     import docopt
     args = docopt.docopt(__doc__)
 
-    # Setup the workspaces
-
     work_blast, work_msa = MsaWorkspace.from_path(args['<msa_workspace>'])
     work_dels = DeletionsWorkspace(work_msa, 'del_threshold')
 
-    # Calculate a list of candidate deletions.
+    # Choose which deletions to make:
 
-    ref, msa = load_weighted_msa(work_msa)
-    dels = choose_deletions_via_thresholds(ref, msa)
+    msa = load_weighted_msa(work_msa)
+    scores = calc_deletion_scores(msa)
+    dels = choose_deletions_via_thresholds(scores)
 
-    # Record the results.
+    # Record the results:
 
     print(f"Chose {len(dels)} deletions:\n")
     print(dels.describe())
 
-    work_dels.write_deletions(ref, dels)
+    work_dels.write_deletions(dels, msa)
     work_dels.write_metadata()
 
+import pytest
 
-def test_find_runs():
-    examples = [
+@pytest.mark.parametrize(
+        'input, expected', [
             ([], []),
 
             ([0], []),
@@ -106,7 +109,7 @@ def test_find_runs():
             ([0, 0, 1, 1], [(2, 4)]),
             ([1, 0, 0, 1], [(0, 1), (3, 4)]),
     ]
-
-    for example, result in examples:
-        assert list(find_runs(example)) == result
+)
+def test_find_runs(input, expected):
+    assert list(find_runs(input)) == expected
 
