@@ -1,29 +1,27 @@
-***************************
-Shortest functional protein
-***************************
+****
+minp
+****
 
-.. image:: https://img.shields.io/pypi/v/shortest_functional_protein.svg
-   :target: https://pypi.python.org/pypi/shortest_functional_protein
+.. image:: https://img.shields.io/pypi/v/minp.svg
+   :target: https://pypi.python.org/pypi/minp
 
-.. image:: https://img.shields.io/pypi/pyversions/shortest_functional_protein.svg
-   :target: https://pypi.python.org/pypi/shortest_functional_protein
+.. image:: https://img.shields.io/pypi/pyversions/minp.svg
+   :target: https://pypi.python.org/pypi/minp
 
-.. image:: https://img.shields.io/travis/kalekundert/shortest_functional_protein.svg
-   :target: https://travis-ci.org/kalekundert/shortest_functional_protein
+.. image:: https://img.shields.io/readthedocs/minp.svg
+   :target: https://minp.readthedocs.io/en/latest/?badge=latest
 
-.. image:: https://img.shields.io/coveralls/kalekundert/shortest_functional_protein.svg
-   :target: https://coveralls.io/github/kalekundert/shortest_functional_protein?branch=master
+.. image:: https://img.shields.io/travis/kalekundert/minp.svg
+   :target: https://travis-ci.org/kalekundert/minp
+
+.. image:: https://img.shields.io/coveralls/kalekundert/minp.svg
+   :target: https://coveralls.io/github/kalekundert/minp?branch=master
 
 Installation
 ============
-To install use pip:
+Install minp using ``pip``::
 
-    $ pip install shortest_functional_protein
-
-Or clone the repo:
-
-    $ git clone https://github.com/kalekundert/shortest_functional_protein.git
-    $ python setup.py install
+    $ pip install minp
 
 Usage
 =====

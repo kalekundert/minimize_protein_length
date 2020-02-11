@@ -4,35 +4,23 @@
 Plot which residues were chosen to be deleted.
 
 Usage:
-    plot_deletions.py <dels_workspace>... [-n]
+    minp plot_deletions <dels_workspace>... [-n]
 
 Options:
     -n --normalize
+        Scale each plot by the total number of deletions, to make it easier to 
+        compare strategies that produce very different numbers of deletions.  
+        Note that strategies that produce longer deletions will still have more 
+        area than those that produce shorter deletions.
 """
 
 import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.offsetbox import AnchoredText
-from utils import DeletionsWorkspace, load_weighted_msa
+from minp import DeletionsWorkspace, load_weighted_msa
 
-def count_deletions(msa, dels, normalize=False):
-    n_res = len(msa.ref_ungapped)
-    n_dels = np.zeros(n_res, dtype=int)
-
-    for _, row in dels.iterrows():
-        i = int(row['del_start'])
-        j = int(row['del_end'])
-        n_dels[i:j] += 1
-
-    if normalize:
-        n_dels = n_dels / sum(n_dels)
-
-    return n_dels
-
-
-if __name__ == '__main__':
+def main():
     import docopt
     args = docopt.docopt(__doc__)
 
@@ -51,4 +39,19 @@ if __name__ == '__main__':
     plt.ylabel("relative deletions" if args['--normalize'] else "deletions")
     plt.legend(loc='best')
     plt.show()
+
+def count_deletions(msa, dels, normalize=False):
+    n_res = len(msa.ref_ungapped)
+    n_dels = np.zeros(n_res, dtype=int)
+
+    for _, row in dels.iterrows():
+        i = int(row['del_start'])
+        j = int(row['del_end'])
+        n_dels[i:j] += 1
+
+    if normalize:
+        n_dels = n_dels / sum(n_dels)
+
+    return n_dels
+
 

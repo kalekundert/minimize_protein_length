@@ -1,19 +1,7 @@
 #!/usr/bin/env python3
 
-"""\
-Pick residues to delete by finding gaps that can be closed by loophash.
-
-Usage:
-    04_choose_deletions_via_loophash.py <msa_workspace> [-f]
-
-Options:
-    -f --force
-        Discard and recalculate any cached data.
-"""
-
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import logging
 import autoprop, toml
 
@@ -22,10 +10,6 @@ from Bio.SubsMat.MatrixInfo import blosum80
 from pyrosetta import init as init_rosetta, pose_from_file
 from pyrosetta.rosetta.protocols import loophash
 from pyrosetta.rosetta.utility import fixedsizearray1_double_6_t as Real6
-from pyrosetta.rosetta.std import vector_unsigned_long
-from utils import MsaWorkspace, LoophashWorkspace
-from utils import load_weighted_msa, calc_deletion_scores, remove_gaps
-from pathlib import Path
 
 class LoophashDatabases:
 
@@ -205,8 +189,6 @@ def choose_gaps_to_delete(scores, gaps, filters):
             groupby(['del_start', 'del_end'], as_index=False).\
             agg(np.mean)
 
-    print(df_uniq.head())
-
     filters['Duplicates'] = len(df) - len(df_uniq)
 
     return df_uniq
@@ -223,11 +205,11 @@ def load_spannable_gaps(work_dels, msa):
         )
 
         init_rosetta(set_logging_handler='logging')
-        db = LoophashDatabases.load(work_dels.input_loophash_db)
+        db = LoophashDatabases.load(work_dels.shared.loophash_db)
         aligned_pose = AlignedPose.from_file(
                 msa,
-                work_dels.input_pdb,
-                work_dels.input_pdb_chain,
+                work_dels.shared.target_pdb,
+                work_dels.shared.target_pdb_chain,
         )
 
         gaps, filters = find_spannable_gaps(db, aligned_pose)
@@ -258,8 +240,26 @@ def find_spannable_gaps(db, aligned_pose):
             unit=' pair'
     )
     for i, j in all_pairs:
+
         if not aligned_pose.has_resis(i, j):
             filters['Residue missing from pose'] += 1
+            continue
+
+        # Leaps involving the first residue of the pose will trigger a segfault 
+        # in `get_rt_over_leap_without_foldtree_bs()`, due to it attempting to 
+        # access an atom from the previous residue to complete the stub.  The 
+        # other `get_rt_over_leap*()` functions handle this case more 
+        # gracefully (returning False and reporting an error), but still fail 
+        # to calculate the leap.  
+        #
+        # The workaround to skip the first residue, when it comes up.  At first 
+        # I tried to modify the iterator to exclude the first position in the 
+        # reference sequence, but that position may or may not correspond to 
+        # the first position in the pose (e.g. if the pose in missing some 
+        # N-terminal residues).  So the check has to be done here.
+
+        if aligned_pose.resis[i] == 1:
+            filters['No spanning loop found'] += 1
             continue
 
         n_loop_res = find_smallest_spanning_loop(
@@ -294,13 +294,10 @@ def find_smallest_spanning_loop(db, pose, resi_n, resi_c, radius=1):
     that can span the gap between the given residues in the given pose.  Return 
     0 if no such loops could be found.
     """
-    # See lab notebook and 03_check_loophash_recovery:
+    # See lab notebook and `check_loophash_recovery`:
     # radius=1 seems to be the best for recovering known loop lengths.  Since 
     # I'm trying to use loophash as a ruler here, that is a good metric for 
     # what I want.
-
-    pose_bb = loophash.BackboneSegment()
-    pose_bb.read_from_pose(pose, resi_n, resi_c - resi_n)
 
     # Find the 6D transformation between the ends of the gap.
     rt = Real6();
@@ -382,102 +379,4 @@ def get_chain_info(pose, chain):
 
     return seq, resis
 
-
-if __name__ == '__main__':
-
-    # Setup the workspaces:
-
-    import docopt
-    args = docopt.docopt(__doc__)
-
-    work_blast, work_msa = MsaWorkspace.from_path(args['<msa_workspace>'])
-    work_dels = LoophashWorkspace(work_msa)
-
-    if args['--force']:
-        work_dels.rmdir()
-        work_dels.mkdir()
-
-    # Choose which deletions to make:
-
-    msa = load_weighted_msa(work_msa)
-    scores = calc_deletion_scores(msa)
-    gaps, filters = load_spannable_gaps(work_dels, msa)
-    dels = choose_gaps_to_delete(scores, gaps, filters)
-
-    # Analyze the results:
-
-    print(filters)
-    print(dels.describe()); print()
-
-    work_dels.write_deletions(dels, msa)
-    work_dels.write_metadata()
-
-import pytest
-
-@pytest.fixture(scope='session')
-def rosetta():
-    init_rosetta()
-
-def test_get_chain_info(rosetta):
-    pose = pose_from_file('kysi.pdb')
-    seq, resis = get_chain_info(pose, 'B')
-
-    assert seq == 'KYSI'
-    assert resis == [3,4,5,6]
-
-@pytest.mark.parametrize(
-        'path, chain, ref, expected', [(
-            'kysi.pdb', 'B',
-            'KYSI',
-            {0:3, 1:4, 2:5, 3:6},
-        ), (
-            'kysi.pdb', 'B',
-            'AKYSI',
-            {1:3, 2:4, 3:5, 4:6},
-        ), (
-            'kysi.pdb', 'B',
-            'KYASI',
-            {0:3, 1:4, 3:5, 4:6},
-        ), (
-            'kysi.pdb', 'B',
-            'KYSIA',
-            {0:3, 1:4, 2:5, 3:6},
-        )]
-)
-def test_map_pose_indices(path, chain, ref, expected, rosetta):
-    pose = pose_from_file(path)
-    mapping = map_pose_indices(ref, pose, chain)
-    assert mapping == expected
-    
-@pytest.mark.parametrize(
-        'scores, i, j, n, del_start, del_end, del_score', [(
-            # Pick beginning (no sliding)
-            [2, 4, 6, 8, 10],
-             0, 1,            2,
-             0, 2,            3,
-        ), (
-            # Pick end (no sliding)
-            [2, 4, 6, 8, 10],
-                      3,  4,  2,
-                      3,  5,  9,
-        ), (
-            # Pick middle (no sliding)
-            [2, 4, 6, 8, 10],
-                1, 2,         2,
-                1, 3,         5,
-        ), (
-            # Pick beginning (sliding)
-            [10, 8, 6, 4, 2],
-              0,    2,        2,
-              0, 2,           9,
-        ), (
-            # Pick end (sliding)
-            [2, 4, 6, 8, 10],
-                   2,     4,  2,
-                      3,  5,  9,
-        )]
-)
-def test_pick_deletion_window(scores, i, j, n, del_start, del_end, del_score):
-    expected = del_start, del_end, pytest.approx(del_score)
-    assert pick_deletion_window(scores, i, j, n) == expected
 

@@ -4,13 +4,48 @@
 Pick residues to delete by finding runs with above-average deletion scores.
 
 Usage:
-    04_choose_deletions_via_thresholds.py <msa_workspace>
+    minp 04_choose_deletions_via_thresholds <msa_workspace> [-f]
+
+Options:
+    -f --force
+        Discard and recalculate any cached data.
 """
 
 import numpy as np
 import pandas as pd
-from utils import MsaWorkspace, DeletionsWorkspace
-from utils import load_weighted_msa, calc_deletion_scores
+from minp import MsaWorkspace, DeletionsWorkspace
+from minp import load_weighted_msa, calc_deletion_scores
+
+def main():
+
+    # Setup the workspaces:
+
+    import docopt
+    args = docopt.docopt(__doc__)
+
+    work_blast, work_msa = MsaWorkspace.from_path(args['<msa_workspace>'])
+    work_dels = DeletionsWorkspace(work_msa, 'threshold')
+
+    if args['--force']:
+        work_dels.rmdir()
+        work_dels.mkdir()
+
+    # Choose which deletions to make:
+
+    if work_dels.deletions_hdf5.exists():
+        dels = pd.read_hdf(work_dels.deletions_hdf5)
+    else:
+        msa = load_weighted_msa(work_msa)
+        scores = calc_deletion_scores(msa)
+        dels = choose_deletions_via_thresholds(scores)
+
+    # Record the results:
+
+    print(f"Chose {len(dels)} deletions:\n")
+    print(dels.describe())
+
+    work_dels.write_deletions(dels)
+    work_dels.write_metadata()
 
 def choose_deletions_via_thresholds(scores):
     dfs = []
@@ -32,7 +67,7 @@ def choose_deletions_via_thresholds(scores):
     dels = dels [dels['del_score'] > np.mean(scores) ]
 
     # Require that each deletion comprise less than 10% of the whole sequence.
-    #dels = dels[ dels['del_len'] < 0.1 * len(scores) ]
+    dels = dels[ dels['del_len'] < 0.1 * len(scores) ]
 
     return dels.reset_index(drop=True)
 
@@ -62,54 +97,4 @@ def score_runs(dels, scores):
             lambda x: np.mean(scores[ int(x['del_start']) : int(x['del_end']) ]),
             axis=1,
     )
-
-
-if __name__ == '__main__':
-
-    # Setup the workspaces:
-
-    import docopt
-    args = docopt.docopt(__doc__)
-
-    work_blast, work_msa = MsaWorkspace.from_path(args['<msa_workspace>'])
-    work_dels = DeletionsWorkspace(work_msa, 'del_threshold')
-
-    # Choose which deletions to make:
-
-    msa = load_weighted_msa(work_msa)
-    scores = calc_deletion_scores(msa)
-    dels = choose_deletions_via_thresholds(scores)
-
-    # Record the results:
-
-    print(f"Chose {len(dels)} deletions:\n")
-    print(dels.describe())
-
-    work_dels.write_deletions(dels, msa)
-    work_dels.write_metadata()
-
-import pytest
-
-@pytest.mark.parametrize(
-        'input, expected', [
-            ([], []),
-
-            ([0], []),
-            ([1], [(0, 1)]),
-
-            ([0, 0], []),
-            ([0, 1], [(1, 2)]),
-            ([1, 0], [(0, 1)]),
-            ([1, 1], [(0, 2)]),
-
-            ([0, 0, 0, 0], []),
-            ([1, 1, 1, 1], [(0, 4)]),
-            ([1, 1, 0, 0], [(0, 2)]),
-            ([0, 1, 1, 0], [(1, 3)]),
-            ([0, 0, 1, 1], [(2, 4)]),
-            ([1, 0, 0, 1], [(0, 1), (3, 4)]),
-    ]
-)
-def test_find_runs(input, expected):
-    assert list(find_runs(input)) == expected
 

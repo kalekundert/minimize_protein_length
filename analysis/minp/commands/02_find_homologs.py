@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 """\
-Download sequences with similarity to Cas9 from the NCBI databases
+Download sequences with homology to the target.
 
 Usage:
-    blast_cas9.py <workspace> [-d DATABASE] [-n HITS] [-f]
+    minp 02_find_homologs <workspace> [-d DATABASE] [-n HITS] [-f]
 
 Arguments:
     <workspace>
@@ -12,22 +12,22 @@ Arguments:
         particular, this command will populate the workspace with the following 
         files:
 
-        `blast_hits.xml`
+        `homologs.xml`
             Results from the BLAST query, in a parseable XML format.
 
-        `blast_hits.fasta`
+        `homologs.fasta`
             Full sequences corresponding to each hit from the BLAST query.
 
         `metadata.toml`
             Information about the parameters used for the BLAST query.
 
 Options:
-    -d --blast-database=NAME    [default: refseq_protein]
+    -d --database=NAME      [default: refseq_protein]
         The NCBI database to query.  The default is `refseq_protein`, which 
         excludes redundant sequences (important for Cas9, which has many exact 
         duplicates in the database).
 
-    -n --blast-hits=NUM         [default: 5000]
+    -n --num-hits=NUM       [default: 5000]
         The number of BLAST hits to request.  Note that it's better to have too 
         many than too few, because poor hits can be left out when building the 
         MSA, and some MSA algorithms may be better or worse than others at 
@@ -39,24 +39,28 @@ Options:
 
 from Bio import SeqIO, Entrez
 from Bio.Blast import NCBIWWW, NCBIXML
-from utils import BlastWorkspace, report_elapsed_time
 from inform import display, plural
+from minp import HomologsWorkspace, report_elapsed_time
+from io import StringIO
 
-if __name__ == '__main__':
+def main():
 
     # Parse the command-line arguments:
 
     import docopt
     args = docopt.docopt(__doc__)
     params = dict(
-            query='WP_032461047.1',  # S. pyogenes Cas9
-            database=args['--blast-database'],
-            num_hits=int(args['--blast-hits']),
+            algorithm='blast',
+            database=args['--database'],
+            num_hits=int(args['--num-hits']),
     )
 
     # Setup the workspace (e.g. where input and output files will go):
 
-    work = BlastWorkspace(args['<workspace>'])
+    work = HomologsWorkspace.from_params(
+            args['<workspace>'],
+            **params,
+    )
 
     if args['--force']:
         work.rmdir()
@@ -70,13 +74,16 @@ if __name__ == '__main__':
         display("Performing BLAST query (30-45 min)...")
 
         with report_elapsed_time():
+            with work.touch(work.input_fasta) as p:
+                SeqIO.write(work.shared.target_protein_record, p, 'fasta')
+
             with work.touch(work.output_xml) as p:
                 response = NCBIWWW.qblast(
                         'blastp', 
-                        params['database'],
-                        params['query'],
-                        hitlist_size=params['num_hits'],
-                        alignments=params['num_hits'],
+                        work.database,
+                        work.query,
+                        hitlist_size=work.num_hits,
+                        alignments=work.num_hits,
                 )
                 p.write_text(response.read())
 
@@ -84,7 +91,7 @@ if __name__ == '__main__':
 
     if not work.output_fasta.exists():
         display("Downloading hits from NCBI...")
-        Entrez.email = 'kale_kundert@hms.harvard.edu'
+        Entrez.email = work.shared.user_email
 
         with report_elapsed_time():
             with work.output_xml.open() as f:
@@ -94,16 +101,15 @@ if __name__ == '__main__':
                     x.hit_id.split('|')[1]
                     for x in blast.alignments
             ]
-            assert params['query'] in ids
 
+            response = Entrez.efetch(db='protein', rettype='fasta', id=ids)
             with work.touch(work.output_fasta) as p:
-                response = Entrez.efetch(db='protein', rettype='fasta', id=ids)
-                p.write_text(response.read())
+                p.write_text(response.read(), p)
 
     # Report the results:
 
     seqs = list(SeqIO.parse(work.output_fasta, 'fasta'))
-    display(f"Found {plural(seqs):# sequence/s}.")
+    display(f"Found {plural(seqs):# homolog/s}.")
 
     work.metadata['results'] = dict(num_hits=len(seqs))
     work.write_metadata()

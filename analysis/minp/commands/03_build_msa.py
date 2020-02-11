@@ -4,7 +4,7 @@
 Create a MSA for sequences identified by BLAST and downloaded from NCBI.
 
 Usage:
-    build_msa <workspace> [-a ALGORITHM] [-l LIMIT] [-f]
+    minp 03_build_msa <homologs_workspace> [-a ALGORITHM] [-l LIMIT] [-f]
 
 Arguments:
     <workspace>
@@ -30,8 +30,69 @@ Options:
 from Bio import AlignIO, SeqIO
 from Bio.Seq import Seq
 from Bio.Align import Applications, MultipleSeqAlignment
-from utils import BlastWorkspace, MsaWorkspace, report_elapsed_time
-from inform import display
+from minp import MsaWorkspace, report_elapsed_time
+from inform import display, plural
+
+def main():
+
+    # Parse the command-line arguments:
+
+    import docopt
+    args = docopt.docopt(__doc__)
+    params = dict(
+        algorithm=args['--algorithm'],
+        limit=int(args['--limit'] or 0),
+    )
+
+    # Setup the workspace (e.g. where input and output files will go):
+
+    work_msa = MsaWorkspace.from_params(
+            args['<homologs_workspace>'],
+            **params,
+    )
+
+    if args['--force']:
+        work_msa.rmdir()
+        work_msa.mkdir()
+
+    work_msa.update_params(**params)
+
+    # Create an input file containing the target sequence and (possibly) a 
+    # subset of the homologs:
+
+    if not work_msa.input_fasta.exists():
+        seqs = remove_duplicates([
+                work_msa.shared.target_protein_record,
+                *work_msa.homologs.output_records,
+        ])
+        if work_msa.limit:
+            seqs = seqs[:work_msa.limit]
+
+        with work_msa.touch(work_msa.input_fasta) as p:
+            SeqIO.write(seqs, p, 'fasta')
+
+    # Create the MSA:
+
+    if not work_msa.output_aln.exists():
+        display(f"Running '{work_msa.algorithm}'...")
+
+        with report_elapsed_time():
+            with work_msa.touch(work_msa.output_aln):
+                apps[work_msa.algorithm](work_msa)
+
+    # Create a simplified MSA that's easier to visually inspect:
+
+    msa = AlignIO.read(work_msa.output_aln, 'clustal')
+    msa_pruned = prune_gaps(msa, work_msa.shared.target_id)
+
+    if not work_msa.pruned_aln.exists():
+        with work_msa.touch(work_msa.pruned_aln) as p:
+            with p.open('w') as f:
+                AlignIO.write(msa_pruned, f, 'clustal')
+
+    display(msa)
+    work_msa.write_metadata()
+
 
 def mafft_wrapper(work_msa):
     app = Applications.MafftCommandline(
@@ -102,6 +163,24 @@ apps = {
         'tcoffee':  tcoffee_wrapper
 }
 
+def remove_duplicates(seqs):
+    already_seen = set()
+    num_duplicates = 0
+    unique_seqs = []
+
+    for seq in seqs:
+        if seq.id in already_seen:
+            num_duplicates += 1
+            continue
+
+        already_seen.add(seq.id)
+        unique_seqs.append(seq)
+
+    if num_duplicates:
+        display(f"Removed {plural(num_duplicates):# duplicate sequence/s}.")
+
+    return unique_seqs
+
 def prune_gaps(msa, ref_id):
     """
     Remove from the given MSA:
@@ -119,7 +198,7 @@ def prune_gaps(msa, ref_id):
             ref = record
             break
     else:
-        raise ValueError("reference sequence '{ref_id}' not found in MSA")
+        raise ValueError(f"reference sequence '{ref_id}' not found in MSA")
 
     # Find the indices that correspond to non-gaps in the reference sequence.
     non_gaps = []
@@ -140,59 +219,4 @@ def prune_gaps(msa, ref_id):
             msa_pruned.append(record)
 
     return msa_pruned
-
-
-if __name__ == '__main__':
-
-    # Parse the command-line arugments:
-
-    import docopt
-    args = docopt.docopt(__doc__)
-    params = dict(
-        algorithm=args['--algorithm'],
-        limit=int(args['--limit'] or 0),
-    )
-
-    # Setup the workspace (e.g. where input and output files will go):
-
-    work_blast = BlastWorkspace(args['<workspace>'])
-    work_msa = MsaWorkspace.from_params(work_blast, **params)
-
-    if args['--force']:
-        work_msa.rmdir()
-        work_msa.mkdir()
-
-    work_msa.update_params(**params)
-
-    # Create an input file containing a subset of the BLAST hits (if requested):
-
-    if not work_msa.input_fasta.exists():
-        seqs = list(SeqIO.parse(work_blast.output_fasta, 'fasta'))
-        if params['limit']:
-            seqs = seqs[:params['limit']]
-
-        with work_msa.touch(work_msa.input_fasta) as p:
-            SeqIO.write(seqs, p, 'fasta')
-
-    # Create the MSA:
-
-    if not work_msa.output_aln.exists():
-        display(f"Running '{params['algorithm']}'...")
-
-        with report_elapsed_time():
-            with work_msa.touch(work_msa.output_aln):
-                apps[params['algorithm']](work_msa)
-
-    # Create a simplified MSA that's easier to visually inspect:
-
-    msa = AlignIO.read(work_msa.output_aln, 'clustal')
-    msa_pruned = prune_gaps(msa, work_blast.query)
-
-    if not work_msa.pruned_aln.exists():
-        with work_msa.touch(work_msa.pruned_aln) as p:
-            with p.open('w') as f:
-                AlignIO.write(msa_pruned, f, 'clustal')
-
-    display(msa)
-    work_msa.write_metadata()
 
