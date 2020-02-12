@@ -4,7 +4,7 @@ import shutil, time
 import autoprop, toml
 from pathlib import Path
 from datetime import date, timedelta
-from inform import display, fatal
+from inform import display, error, codicil, fatal
 from contextlib import contextmanager
 from more_itertools import one
 
@@ -128,16 +128,13 @@ class JobWorkspace(Workspace):
         curr_params = params
 
         if prev_params and prev_params != curr_params:
-            error("{self.repr} parameters differ from those used previously!")
-            error()
+            error(f"{self.repr} parameters differ from those used previously!")
             for key in params:
-                prev = prev_params[key]
-                curr = curr_params[key]
+                prev = prev_params.get(key, '')
+                curr = curr_params.get(key, '')
                 if prev != curr:
-                    codicil(f"    {key} was {prev!r}, now {curr!r}")
-            error()
-            error("Use the -f flag to overwrite.  Aborting.")
-            sys.exit(1)
+                    codicil(f"    {key!r} was {prev!r}, now {curr!r}")
+            fatal("Use the -f flag to overwrite.  Aborting.")
 
         self.metadata['parameters'] = curr_params
 
@@ -284,6 +281,13 @@ class LoophashWorkspace(DeletionsWorkspace):
         self.spannable_hdf5 = self.root / 'spannable_gaps.hdf5'
         self.filters_toml = self.root / 'spannable_gap_filters.toml'
         self.rosetta_log = self.root / 'rosetta_log.txt'
+
+    def write_deletions(self, dels, filters):
+
+        with self.touch(self.filters_toml) as p:
+            filters.to_toml(p)
+
+        super().write_deletions(dels)
 
 @contextmanager
 def report_elapsed_time():

@@ -64,7 +64,8 @@ class GapFilters:
                 n_residues=self.n_residues,
                 n_missing=self.n_missing,
                 filters=self._counts,
-                filter_order=self._order
+                filter_order=self._order,
+                params=self.params,
         )
 
     @classmethod
@@ -72,6 +73,7 @@ class GapFilters:
         filters = cls(d['n_residues'], d['n_missing'])
         filters._counts = d['filters']
         filters._order = d['filter_order']
+        filters.params = d['params']
         return filters
 
 
@@ -89,6 +91,7 @@ class GapFilters:
         self.n_missing = n_missing
         self._counts = {}
         self._order = {}
+        self.params = {}
 
     def __str__(self):
         s = ""
@@ -100,10 +103,11 @@ class GapFilters:
         }
 
         def format(name, remaining, count=None, indent=0):
+            f = lambda x: x.format(**self.params)
             cols = [
                     '{0:{1}}'.format(x, fmt)
                     for x, fmt in [
-                        (f'{"→ " if indent else ""}{name}: ',       '<35'),
+                        (f'{"→ " if indent else ""}{f(name)}: ',    '<35'),
                         (remaining,                                 '>6'),
                         (f'−{count}' if count else '',              '>7'),
                         (extra_info.get(name, ''),                  's'),
@@ -147,24 +151,28 @@ class GapFilters:
         return self.n_combos - sum(self._counts.values())
 
 def choose_gaps_to_delete(scores, gaps, filters):
+    max_loop = 6
+    max_deletion = 0.1
+
+    filters['Spanning loop >{max_loop} residues'] = 0
+    filters['Deleted >{max_deletion:.0f}% of the protein'] = 0
+    filters['Below-average deletion score'] = 0
+    filters.params.update(dict(
+            max_loop=max_loop,
+            max_deletion=100*max_deletion,
+    ))
+
     hits = []
     score_threshold = np.mean(scores)
     n_res = len(scores)
 
-    max_loop = 6
-    max_deletion = 0.1
-
-    filters[f'Spanning loop >{max_loop} residues'] = 0
-    filters[f'Deleted >{100*max_deletion:.0f}% of the protein'] = 0
-    filters['Below-average deletion score'] = 0
-
     for i, row in gaps.iterrows():
         if row['len_spanning_loop'] > max_loop:
-            filters[f'Spanning loop >{max_loop} residues'] += 1
+            filters['Spanning loop >{max_loop} residues'] += 1
             continue
 
         if row['len_deletion'] / n_res > max_deletion:
-            filters[f'Deleted >{100*max_deletion:.0f}% of the protein'] += 1
+            filters['Deleted >{max_deletion:.0f}% of the protein'] += 1
             continue
 
         del_start, del_end, del_score = pick_deletion_window(
@@ -286,6 +294,7 @@ def find_spannable_gaps(db, aligned_pose):
             'len_deletion': n_del,
         }]
 
+    print()  # Blank line after progress bar.
     return pd.DataFrame(hits), filters
 
 def find_smallest_spanning_loop(db, pose, resi_n, resi_c, radius=1):

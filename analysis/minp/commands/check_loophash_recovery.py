@@ -16,6 +16,7 @@ import pandas as pd
 from pyrosetta import init as init_rosetta
 from minp import load_weighted_msa, MsaWorkspace, LoophashWorkspace
 from minp.loophash import LoophashDatabases, AlignedPose
+from minp.loophash import find_smallest_spanning_loop
 
 def main():
 
@@ -24,7 +25,7 @@ def main():
     import docopt
     args = docopt.docopt(__doc__)
 
-    work_blast, work_msa = MsaWorkspace.from_path(args['<msa_workspace>'])
+    work_homs, work_msa = MsaWorkspace.from_path(args['<msa_workspace>'])
     work_dels = LoophashWorkspace(work_msa)
 
     # Calculate the size of the loops returned by loophash for known gaps:
@@ -33,11 +34,11 @@ def main():
         init_rosetta()
 
         msa = load_weighted_msa(work_msa)
-        db = LoophashDatabases.load()
+        db = LoophashDatabases.load(work_dels.shared.loophash_db)
         aligned_pose = AlignedPose.from_file(
                 msa,
-                work_blast.input_pdb,
-                work_blast.input_pdb_chain,
+                work_dels.shared.target_pdb,
+                work_dels.shared.target_pdb_chain,
         )
 
         df = pd.concat([

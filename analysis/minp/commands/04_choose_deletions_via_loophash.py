@@ -16,7 +16,7 @@ import pandas as pd
 
 from minp import MsaWorkspace, LoophashWorkspace
 from minp import load_weighted_msa, calc_deletion_scores
-from minp.loophash import load_spannable_gaps, choose_gaps_to_delete
+from minp.loophash import load_spannable_gaps, choose_gaps_to_delete, GapFilters
 
 def main():
 
@@ -36,17 +36,18 @@ def main():
 
     if work_dels.deletions_hdf5.exists():
         dels = pd.read_hdf(work_dels.deletions_hdf5)
+        filters = GapFilters.from_toml(work_dels.filters_toml)
     else:
         msa = load_weighted_msa(work_msa)
         scores = calc_deletion_scores(msa)
         gaps, filters = load_spannable_gaps(work_dels, msa)
         dels = choose_gaps_to_delete(scores, gaps, filters)
-        print(filters)
 
     # Analyze the results:
 
+    print(filters)
     print(dels.describe()); print()
 
-    work_dels.write_deletions(dels)
+    work_dels.write_deletions(dels, filters)
     work_dels.write_metadata()
 

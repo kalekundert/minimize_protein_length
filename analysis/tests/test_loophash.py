@@ -33,6 +33,10 @@ def test_get_chain_info(rosetta):
             'kysi.pdb', 'B',
             'KYSIA',
             {0:3, 1:4, 2:5, 3:6},
+        ), (
+            'kysi.pdb', 'B',
+            'ASIA',
+            {0:3, 1:4, 2:5, 3:6},
         )]
 )
 def test_map_pose_indices(path, chain, ref, expected, rosetta):

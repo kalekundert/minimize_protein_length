@@ -114,6 +114,20 @@ def calc_conservation_scores(msa):
 
     return conservation_scores
 
+def count_deletions(msa, dels, normalize=False):
+    n_res = len(msa.ref_ungapped)
+    n_dels = np.zeros(n_res, dtype=int)
+
+    for _, row in dels.iterrows():
+        i = int(row['del_start'])
+        j = int(row['del_end'])
+        n_dels[i:j] += 1
+
+    if normalize:
+        n_dels = n_dels / sum(n_dels)
+
+    return n_dels
+
 def map_ungapped_indices(seq):
     ungapped_indices = {}
 

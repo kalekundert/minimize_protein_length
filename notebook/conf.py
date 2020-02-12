@@ -16,6 +16,7 @@ needs_sphinx = '1.5'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [ #
+    'sphinx.ext.todo',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinxcontrib.programoutput',
@@ -23,6 +24,9 @@ extensions = [ #
     'exmemo.sphinx.biology',
     'exmemo.sphinx.general',
 ]
+
+todo_include_todos = True
+todo_link_only = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['.templates']
@@ -71,9 +75,6 @@ rst_epilog = ".. |br| raw:: html\n\n   <br />"
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
-
-# If true, `todo` and `todoList` produce output, else they produce nothing.
-todo_include_todos = False
 
 ## Options for HTML output
 

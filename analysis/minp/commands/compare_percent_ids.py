@@ -8,6 +8,7 @@ Usage:
     minp compare_percent_ids <msa_workspaces>...
 """
 
+import sys, os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
@@ -27,6 +28,9 @@ def main():
             for p in args['<msa_workspaces>']
     ]
     by_limit_then_algorithm = lambda x: (x.limit, x.algorithm)
+
+    if os.fork():
+        sys.exit()
 
     for work_msa in sorted(work_msas, key=by_limit_then_algorithm):
         msa = load_weighted_msa(work_msa)

@@ -5,9 +5,8 @@ import pandas as pd
 
 from pymol import cmd
 from pymol.wizard import Wizard
-from utils import MsaWorkspace, DeletionsWorkspace
-from utils import load_weighted_msa, calc_deletion_scores
-from plot_deletions import count_deletions
+from minp import MsaWorkspace, DeletionsWorkspace
+from minp import load_weighted_msa, calc_deletion_scores, count_deletions
 
 def paint_deletions(dels_workspace):
     """
@@ -62,9 +61,9 @@ ARGUMENTS
     dels_workspace = a path to a workspace for the final step of the pipeline, 
     which is to pick deletions.
 
-    low = the percentile of the data to make the most blue.
+    low = the percentile of the data to make the most blue {default: 0}.
 
-    high = the percentile of the data to make the most red.
+    high = the percentile of the data to make the most red {default: 50}.
 
 NOTES
 
@@ -75,15 +74,15 @@ NOTES
     msa = load_weighted_msa(work_msa)
     scores = calc_deletion_scores(msa)
 
-    low = np.percentile(scores, low)
-    high = np.percentile(scores, high)
+    cutoff_low = np.percentile(scores, float(low))
+    cutoff_high = np.percentile(scores, float(high))
 
     sele = f'chain B and polymer.protein'
     cmd.alter(sele, 'b=scores[int(resi)-1]', space={**locals(), **globals()})
-    cmd.spectrum('b', 'blue_white_red', sele, minimum=low, maximum=high)
+    cmd.spectrum('b', 'blue_white_red', sele, minimum=cutoff_low, maximum=cutoff_high)
 
-    print(f'low:  {low:.2f}')
-    print(f'high: {high:.2f}')
+    print(f'low:  {cutoff_low:.2f} ({float(low):.2f}%)')
+    print(f'high: {cutoff_high:.2f} ({float(high):.2f}%)')
 
 def cycle_deletions(dels_workspace, cursor=0, low=0, high=50):
     """
@@ -123,8 +122,8 @@ class CycleDeletions(Wizard):
 
         self.dels = pd.read_hdf(work_dels.deletions_hdf5).sort_values(['del_start', 'del_end'])
         self.cursor = cursor
-        self.low = low
-        self.high = high
+        self.low = float(low)
+        self.high = float(high)
         self.sele = f'chain B and polymer.protein'
 
         cmd.alter(
